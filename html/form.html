@@ -1,0 +1,68 @@
+<html>
+<head>
+<title>Send Webmail</title>
+</head>
+<body>
+	<form method="POST" action="status.html" accept-charset="ISO-8859-15">
+	
+		<table>
+			<tr>
+				<td>
+					From: 
+				</td>
+				<td>
+					<input type="text" name="from" />
+				</td>
+			</tr>
+			<tr>
+				<td>
+					To:
+				</td>
+				<td> 
+					<input type="text" name="to" />
+				</td>
+			</tr>
+			<tr>
+				<td>
+					Subject:
+				</td>
+				<td>
+					<input type="text" name="subject" />			
+				</td>
+			</tr>
+	 		<tr>
+	 			<td>
+	 				SMTP Server: 
+	 			</td>
+	 			<td>
+	 				<input type="text" name="smtpserver" />		
+	 			</td>
+	 		</tr>	
+			<tr>
+				<td>
+					Message: 
+				</td>
+				<td>
+					<textarea name="message" rows="20" cols="80"></textarea>
+				</td>
+			</tr>
+			<tr>
+				<td>
+					Delay:
+				</td>
+				<td>
+	 				<input type="text" name="delay" />		
+	 			</td>
+			</tr>
+			<tr>
+				<td>
+					<input type="submit" value="Send" />
+					<input type="reset" value="Reset" />
+				</td>
+			</tr>
+		</table>
+	
+	</form>
+	
+</body>
+</html>

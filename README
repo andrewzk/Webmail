@@ -1,0 +1,60 @@
+Webmail
+Author: Andrew Keating <andrewzkeating@gmail.com>
+April 8, 2011
+
+This application implements a simple HTTP server and SMTP client to enable 
+sending email through a web interface. It is only intended for use on a LAN, as 
+SMTP authentication is not supported.
+
+To compile, execute ./compile.sh. Start the web server by executing ./run.sh. 
+Java version >= 5 is required.
+
+Usage notes:
+
+After executing the application, http://localhost:8080 will present the user 
+with a web form. Complete the form fields and press 'Submit' to attempt to send 
+an email. If a value is entered in the 'Delay' field, the email will be sent 
+after the input delay in seconds.
+
+If an SMTP server is entered in the web form, the SMTP client attempts to 
+connect to it on port 25. If no server is entered, a DNS MX lookup is performed 
+on the domain of the recipient's email address and the result of the lookup (if 
+any) is used as the SMTP server. Upon connecting, the SMTP client checks for a 
+220 Service Ready code from the server, indicating a successful connection.
+
+The status of all emails is stored by the application. When a delayed email is 
+sent, it is initially considered to be “Pending,” and once the email has been 
+sent, its status either changes to “Success” or an error message. When a user 
+sends a delayed email, he/she is automatically forwarded to a dynamically-
+generated status page, which displays the status of each email in a table.
+
+Technical details:
+
+The web server opens a TCP socket on Port 80 and listens for HTTP requests. 
+Incoming HTTP requests are validated, and a 400 Bad Request is returned if the 
+HTTP is malformed.
+
+In order to support international characters, the SMTP client implements the 
+MIME quoted-printable encoding as described in RFC2045 [1]. Email lines are 
+limited at 76 characters, and non-ASCII characters are encoded as an equals 
+sign followed by the character's hexadecimal representation. Email subjects are 
+encoded in an RFC2047-compliant format [2]. Conforming to RFC2821 [3], the SMTP 
+client sends HELO, MAIL FROM, RCPT TO messages to the SMTP server and checks to 
+ensure that 250 OK was received as a reply for each message. It then sends a 
+DATA message and ensures that a 354 response code is received from the SMTP 
+server. The SMTP client sends the email headers (to, from, subject and date), 
+as well as MIME headers (MIME-Version, Content-Type, Content-Transfer-Encoding),
+then completes the message by sending a blank line and a single period. If a 
+250 OK is received in response, the SMTP client finally sends a QUIT message 
+and disconnects from the SMTP server.
+
+In SMTP, a line containing a period signals the end of a message's body. If a 
+user sends an email containing a single period prior to the end of the email, 
+truncation results. To avoid this, single periods in message bodies are 
+replaced with double periods, a technique known as "dot stuffing."
+
+[1] RFC2045 Multipurpose Internet Mail Extensions (MIME) Part One: Format of 
+Internet Message Bodies - https://www.ietf.org/rfc/rfc2045.txt
+[2] RFC2047 MIME (Multipurpose Internet Mail Extensions) Part Three: Message 
+Header Extensions for Non-ASCII Text - https://www.ietf.org/rfc/rfc2047.txt
+[3] RFC2821 Simple Mail Transfer Protocol - https://www.ietf.org/rfc/rfc2821.txt
