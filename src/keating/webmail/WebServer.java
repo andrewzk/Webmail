@@ -1,7 +1,6 @@
 package keating.webmail;
 
 import java.io.BufferedReader;
-import keating.webmail.SMTPClient;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileReader;
@@ -19,40 +18,65 @@ import java.util.StringTokenizer;
 /**
  * WebServer.java
  * 
- * Barebones single-threaded HTTP server to handle the email sending form
+ * Barebones single-threaded HTTP server to handle the webmail form. For
+ * simplicity, all connections are non-persistent.
+ *  
+ * The WebServer also serves as the entry point to the application
  * 
  * @author Andrew Keating
  */
 
 public class WebServer {
 
+  private static final int SMTP_TIMEOUT = 2000;
+
+  private ServerSocket server;
+  private Socket socket;
   private BufferedReader reader;
   private BufferedWriter writer;
-  private Socket socket;
   private int messageId; // Global message ID counter
-  private static ArrayList<EmailMessage> messages; // Collection of email status messages
+  private SMTPClient smtpClient;
+  private ArrayList<EmailMessage> messages; // Collection of email status messages
 
   /**
    * Constructs a new WebServer on the specified port and listens for requests
-   * @param port Numerical port (1-65535)
-   * @param timeout Amount of time to wait before a read times out (milliseconds)
+   * @param port Numerical port (<= 65535)
    */
-  public WebServer(int port, int timeout) {
+  public WebServer(int port) {
     messages = new ArrayList<EmailMessage>();
+    smtpClient = new SMTPClient(SMTP_TIMEOUT);
 
     try {
-      ServerSocket server = new ServerSocket(port);
-
-      while(true) {
-        socket = server.accept();
-        reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-        writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
-        socket.setSoTimeout(timeout);
-        processRequest(reader.readLine());    
-      }
+      server = new ServerSocket(port);
     }
     catch(IOException e) {
-      System.out.println(e.getMessage());
+      throw new IllegalArgumentException(e.getMessage());
+    }
+  }
+
+  /**
+   * Starts the web server, accepting requests on the socket
+   * @throws IOException If there is an error communicating with the client
+   */
+  public void start() {
+    while(true) {
+      try {
+        try {
+          socket = server.accept();
+          reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+          writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
+          processRequest(reader.readLine());
+        }
+        finally {
+          // Connections are non-persistent, so we just close after handling the request
+          if(reader != null) reader.close();
+          if(writer != null) writer.close();
+          if(socket != null) socket.close();
+        }
+      }
+      catch(IOException e) {
+        System.out.println("Error handling client: " + e.getMessage());
+      }
     }
   }
 
@@ -60,38 +84,38 @@ public class WebServer {
    * Sends an HTTP response to the client
    * @param response The response to send
    */
-  public void sendResponse(String response) {
+  private void sendResponse(String response) {
     try {
       writer.write(response);
       writer.flush();
-      writer.close();
     } 
     catch (IOException e) {
-      System.out.println(e.getMessage());
+      System.out.println("Error sending response: " + e.getMessage());
     }
   }
 
   /**
    * Serves delivery failure page with error from SMTP server
+   * This is achieved by updating failure.html and redirecting
+   * the client with a 301
    * @param message Failure message
    */
-  private void sendFail(String message){
-    String httpResponse = "";
-    httpResponse += "HTTP/1.1 301 Moved Permanently\r\n";
-    httpResponse += "Location: /failure.html\r\n";
+  private void sendFail(String message) {
+    StringBuffer httpResponse = new StringBuffer();
+    httpResponse.append("HTTP/1.1 301 Moved Permanently\r\n");
+    httpResponse.append("Location: /failure.html\r\n");
     File f = new File("../html/" + "failure.html");
     try {
       FileWriter fwriter = new FileWriter(f);
       fwriter.write("<html><head><title>Delivery Failure</title><body>Delivery Failure: " + message + "<br /><a href=\"form.html\">Back</a></body></html>");
-      fwriter.flush();
       fwriter.close();
     }
     catch(IOException e) {
       System.out.println("Error writing file: " + e.getMessage());
     }
-    httpResponse += "Content-Type: text/html;charset=iso-8859-15\r\n";
-    httpResponse += "\r\n";
-    sendResponse(httpResponse);
+    httpResponse.append("Content-Type: text/html;charset=iso-8859-15\r\n");
+    httpResponse.append("\r\n");
+    sendResponse(httpResponse.toString());
   }
 
   /**
@@ -99,7 +123,7 @@ public class WebServer {
    * Validates input and sends the proper response, updating the email status page as necessary
    * @param request The input request from a client
    */
-  public void processRequest(String request) {
+  private void processRequest(String request) {
     BufferedReader fileReader = null;
     StringBuffer httpResponse = new StringBuffer();
     String filename = "";
@@ -124,6 +148,7 @@ public class WebServer {
           filename = tokenizer.nextToken();
         }
 
+        // Serve the Webmail form by default
         if(filename.equals("/")) {
           filename += "form.html";
         }
@@ -133,6 +158,7 @@ public class WebServer {
         if(f.exists()) {
           httpResponse.append("HTTP/1.1 200 OK\r\n");
           httpResponse.append("Content-Type: text/html;charset=utf-8\r\n");
+          httpResponse.append("Connection: close\r\n");
           httpResponse.append("\r\n");
 
           // Update the status page on a new request
@@ -141,7 +167,6 @@ public class WebServer {
             File statusPage = new File("../html/" + "status.html");
             FileWriter fwriter = new FileWriter(statusPage);
             fwriter.write(statusEntry.toString());
-            fwriter.flush();
             fwriter.close();
           }
 
@@ -154,8 +179,10 @@ public class WebServer {
           httpResponse.append(fileContents.toString() + "\r\n");
         }
         else {
+          // If the requested page doesn't exist, respond with a 404
           httpResponse.append("HTTP/1.1 404 Not Found\r\n");
           httpResponse.append("Content-Type: text/html;charset=iso-8859-15\r\n");
+          httpResponse.append("Connection: close\r\n");
           httpResponse.append("\r\n");
           httpResponse.append("<html><body>Page not found (Error 404)</html></body>\r\n");
         }
@@ -212,9 +239,9 @@ public class WebServer {
             subject = data.substring(data.indexOf("subject=") + 8, data.indexOf("&"));
             data = data.substring(data.indexOf("&") + 1,data.length());
             smtpServer = data.substring(data.indexOf("smtpserver=") + 11, data.indexOf("&"));
-            data=data.substring(data.indexOf("&") + 1,data.length());
+            data = data.substring(data.indexOf("&") + 1,data.length());
             message = data.substring(data.indexOf("message=") + 8, data.indexOf("&"));
-            data=data.substring(data.indexOf("&") + 1,data.length());
+            data = data.substring(data.indexOf("&") + 1,data.length());
             delay = data.substring(data.indexOf("delay=") + 6, data.length());
           }
           catch(Exception e) {
@@ -224,7 +251,6 @@ public class WebServer {
 
           // The URL was structured properly, so now we can validate the input
 
-          SMTPClient mailclient = new SMTPClient(2000);
           String mailStatus;
           int sendDelay = 0;
 
@@ -260,11 +286,11 @@ public class WebServer {
             EmailMessage m = new EmailMessage(messageId, to, from, subject, smtpServer, "Pending", message);
             messages.add(m);
             messageId++;
-            mailclient.sendMail(m, Integer.parseInt(delay));
-
+            smtpClient.sendMail(m, Integer.parseInt(delay));
             httpResponse.append("HTTP/1.1 301 Moved Permanently\r\n");
             httpResponse.append("Location: /status.html\r\n");
             httpResponse.append("Content-Type: text/html;charset=iso-8859-15\r\n");
+            httpResponse.append("Connection: close\r\n");
             httpResponse.append("\r\n");
           }
           else {
@@ -272,8 +298,8 @@ public class WebServer {
             EmailMessage m = new EmailMessage(messageId, to, from, subject, smtpServer, "Pending", message);
             messages.add(m);
             messageId++;
-            mailStatus = mailclient.sendMail(m);
-            updateStatus(m.getId(), mailStatus);
+            mailStatus = smtpClient.sendMail(m);
+            m.setStatus(mailStatus);
 
             httpResponse.append("HTTP/1.1 301 Moved Permanently\r\n");
             // Determine if the message succeeded or not and redirect accordingly
@@ -285,20 +311,17 @@ public class WebServer {
               File f = new File("../html/" + "failure.html");
               FileWriter fwriter=new FileWriter(f);
               fwriter.write("<html><head><title>Delivery Failure</title><body>Delivery Failure: " + mailStatus + "<br /><a href=\"form.html\">Back</a></body></html>");
-              fwriter.flush();
               fwriter.close();
             }
-            httpResponse.append("Content-Type: text/html;charset=iso-8859-15\r\n");
-            httpResponse.append("\r\n");
           }
         }
       }
       else {
-        // Invalid request
+        // We only support GET and POST
         sendMalformedHttp();
         return;
       }
-      
+
       // Serve the response to the client
       sendResponse(httpResponse.toString());
     }
@@ -311,13 +334,13 @@ public class WebServer {
    * Serves a 400 Bad Request to the client
    */
   private void sendMalformedHttp() {
-    // Returning Malformed Status message
-    String malformedHttpResponse="";
-    malformedHttpResponse += "HTTP/1.1 400 Bad Request\r\n";
-    malformedHttpResponse += "Content-Type: text/html;charset=iso-8859-15\r\n";
-    malformedHttpResponse += "\r\n";
-    malformedHttpResponse += "<html><body>Bad Request (Error 400)</body></html>\r\n";
-    sendResponse(malformedHttpResponse);
+    StringBuffer malformedHttpResponse = new StringBuffer();
+    malformedHttpResponse.append("HTTP/1.1 400 Bad Request\r\n");
+    malformedHttpResponse.append("Content-Type: text/html;charset=iso-8859-15\r\n");
+    malformedHttpResponse.append("Connection: close\r\n");
+    malformedHttpResponse.append("\r\n");
+    malformedHttpResponse.append("<html><body>Bad Request (Error 400)</body></html>\r\n");
+    sendResponse(malformedHttpResponse.toString());
   }
 
   /**
@@ -326,7 +349,7 @@ public class WebServer {
    */
   private String updateStatusPage() {
     StringBuffer statusEntry = new StringBuffer();
-    statusEntry.append("<html><head><meta http-equiv=\"Content-Type\" content=\"text/html;charset=utf-8\" /><title>Status Page</title></head><body>");
+    statusEntry.append("<html><head><meta http-equiv=\"Content-Type\" content=\"text/html;charset=iso-8859-15\" /><title>Status Page</title></head><body>");
     statusEntry.append("<a href=\"form.html\">Back</a> <a href=\"status.html\">Refresh</a><br />");
     statusEntry.append("<table border=\"1\" empty-cells=\"show\"><tr><td>To</td><td>From</td><td>Subject</td><td>Status</td><td>Submitted Time</td><td>Delivered Time</td></tr>");
 
@@ -363,17 +386,9 @@ public class WebServer {
     return statusEntry.toString();
   }
 
-  /**
-   * Updates the status message for a particular email message
-   * @param id The ID of the message to update
-   * @param status The updated status
-   */
-  public static void updateStatus(int id, String status) {
-    messages.get(id).setStatus(status);
-  }
-
   public static void main(String[] args) {
-    // Launch WebServer on port 8080 with 1 second timeout
-    new WebServer(8080, 1000);
+    // Launch WebServer on port 8080
+    WebServer s = new WebServer(8080);
+    s.start();
   }
 }

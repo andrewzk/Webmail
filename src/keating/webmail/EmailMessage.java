@@ -13,13 +13,13 @@ import java.util.Date;
  */
 public class EmailMessage {
 
+  private int id;
   private String to;
   private String from;
   private String status;
   private String subject;
   private String server;
   private String data;
-  private int id;
   private String submitTime;
   private String deliveryTime;
   

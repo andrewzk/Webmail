@@ -24,7 +24,6 @@ public class DNSClient {
    * Not intended to be instantiated
    */
   private DNSClient() { }
-  
 
   /**
    * Performs an MX lookup on the input domain and returns the result

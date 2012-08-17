@@ -26,11 +26,12 @@ The status of all emails is stored by the application. When a delayed email is
 sent, it is initially considered to be “Pending,” and once the email has been 
 sent, its status either changes to “Success” or an error message. When a user 
 sends a delayed email, he/she is automatically forwarded to a dynamically-
-generated status page, which displays the status of each email in a table.
+generated status page, which displays the status of each email in a table. When 
+a delayed email is sent, the application informs the sender via email.
 
 Technical details:
 
-The web server opens a TCP socket on Port 80 and listens for HTTP requests. 
+The web server opens a TCP socket on Port 8080 and listens for HTTP requests. 
 Incoming HTTP requests are validated, and a 400 Bad Request is returned if the 
 HTTP is malformed.
 
