@@ -30,13 +30,12 @@ public class WebServer {
 
   private static final int SMTP_TIMEOUT = 2000;
 
+  private int messageId; // Global message ID counter
+  private ArrayList<EmailMessage> messages; // Collection of email status messages
   private ServerSocket server;
   private Socket socket;
   private BufferedReader reader;
   private BufferedWriter writer;
-  private int messageId; // Global message ID counter
-  private SMTPClient smtpClient;
-  private ArrayList<EmailMessage> messages; // Collection of email status messages
 
   /**
    * Constructs a new WebServer on the specified port and listens for requests
@@ -44,7 +43,6 @@ public class WebServer {
    */
   public WebServer(int port) {
     messages = new ArrayList<EmailMessage>();
-    smtpClient = new SMTPClient(SMTP_TIMEOUT);
 
     try {
       server = new ServerSocket(port);
@@ -105,14 +103,20 @@ public class WebServer {
     httpResponse.append("HTTP/1.1 301 Moved Permanently\r\n");
     httpResponse.append("Location: /failure.html\r\n");
     File f = new File("../html/" + "failure.html");
+    FileWriter fwriter = null;
     try {
-      FileWriter fwriter = new FileWriter(f);
-      fwriter.write("<html><head><title>Delivery Failure</title><body>Delivery Failure: " + message + "<br /><a href=\"form.html\">Back</a></body></html>");
-      fwriter.close();
+      try {
+        fwriter = new FileWriter(f);
+        fwriter.write("<html><head><title>Delivery Failure</title><body>Delivery Failure: " + message + "<br /><a href=\"form.html\">Back</a></body></html>");
+      }
+      finally {
+        if(fwriter != null) fwriter.close();
+      }
     }
     catch(IOException e) {
       System.out.println("Error writing file: " + e.getMessage());
     }
+    
     httpResponse.append("Content-Type: text/html;charset=iso-8859-15\r\n");
     httpResponse.append("\r\n");
     sendResponse(httpResponse.toString());
@@ -124,10 +128,6 @@ public class WebServer {
    * @param request The input request from a client
    */
   private void processRequest(String request) {
-    BufferedReader fileReader = null;
-    StringBuffer httpResponse = new StringBuffer();
-    String filename = "";
-
     try {
       StringTokenizer tokenizer = new StringTokenizer(request);
       String requestType = "";
@@ -140,6 +140,8 @@ public class WebServer {
       }
 
       // Handle HTTP GET request - Serve requested file if it exists
+      String filename = "";
+      StringBuffer httpResponse = new StringBuffer();
       if(requestType.equals("GET")) {
         if(!tokenizer.hasMoreTokens()) {
           filename = "/";
@@ -153,8 +155,7 @@ public class WebServer {
           filename += "form.html";
         }
 
-        File f = new File("../html/" + filename.substring(1));
-
+        File f = new File("../html/" + filename.substring(1));  
         if(f.exists()) {
           httpResponse.append("HTTP/1.1 200 OK\r\n");
           httpResponse.append("Content-Type: text/html;charset=utf-8\r\n");
@@ -165,16 +166,28 @@ public class WebServer {
           if(filename.equals("/status.html")) {
             String statusEntry = updateStatusPage();
             File statusPage = new File("../html/" + "status.html");
-            FileWriter fwriter = new FileWriter(statusPage);
-            fwriter.write(statusEntry.toString());
-            fwriter.close();
+            FileWriter fwriter = null;
+            try {
+              fwriter = new FileWriter(statusPage);
+              fwriter.write(statusEntry.toString());
+            }
+            finally {
+              if (fwriter != null) fwriter.close();
+            }
           }
 
+          // Write the file contents into the response
           StringBuffer fileContents = new StringBuffer();
-          fileReader = new BufferedReader(new FileReader(f));
-          String line = "";
-          while((line = fileReader.readLine()) != null) {
-            fileContents.append(line);
+          BufferedReader fileReader = null;
+          try {
+            fileReader = new BufferedReader(new FileReader(f));
+            String line = "";
+            while((line = fileReader.readLine()) != null) {
+              fileContents.append(line);
+            }
+          }
+          finally {
+            if(fileReader != null) fileReader.close();
           }
           httpResponse.append(fileContents.toString() + "\r\n");
         }
@@ -222,27 +235,28 @@ public class WebServer {
           // Process request content to determine email fields
           char content[] = new char[length];
           reader.read(content);
-          String data = new String(content);
+          String urlString = new String(content);
           String to = "";
           String from = "";
           String subject = "";
           String smtpServer = "";
           String message = "";
           String delay = "";
-          data = URLDecoder.decode(data, "ISO-8859-15");
+          urlString = URLDecoder.decode(urlString, "ISO-8859-15");
 
           try {
-            from = data.substring(data.indexOf("from=") + 5, data.indexOf("&")); 
-            data = data.substring(data.indexOf("&") + 1,data.length());
-            to = data.substring(data.indexOf("to=") + 3, data.indexOf("&"));
-            data = data.substring(data.indexOf("&") + 1,data.length());
-            subject = data.substring(data.indexOf("subject=") + 8, data.indexOf("&"));
-            data = data.substring(data.indexOf("&") + 1,data.length());
-            smtpServer = data.substring(data.indexOf("smtpserver=") + 11, data.indexOf("&"));
-            data = data.substring(data.indexOf("&") + 1,data.length());
-            message = data.substring(data.indexOf("message=") + 8, data.indexOf("&"));
-            data = data.substring(data.indexOf("&") + 1,data.length());
-            delay = data.substring(data.indexOf("delay=") + 6, data.length());
+            // Read parameters one by one, advancing urlString to the next ampersand after each parameter
+            from = urlString.substring(urlString.indexOf("from=") + 5, urlString.indexOf("&"));
+            urlString = urlString.substring(urlString.indexOf("&") + 1, urlString.length());
+            to = urlString.substring(urlString.indexOf("to=") + 3, urlString.indexOf("&"));
+            urlString = urlString.substring(urlString.indexOf("&") + 1, urlString.length());
+            subject = urlString.substring(urlString.indexOf("subject=") + 8, urlString.indexOf("&"));
+            urlString = urlString.substring(urlString.indexOf("&") + 1, urlString.length());
+            smtpServer = urlString.substring(urlString.indexOf("smtpserver=") + 11, urlString.indexOf("&"));
+            urlString = urlString.substring(urlString.indexOf("&") + 1, urlString.length());
+            message = urlString.substring(urlString.indexOf("message=") + 8, urlString.indexOf("&"));
+            urlString = urlString.substring(urlString.indexOf("&") + 1, urlString.length());
+            delay = urlString.substring(urlString.indexOf("delay=") + 6, urlString.length());
           }
           catch(Exception e) {
             // If there are any problems with the URL, serve a 400 Bad Request
@@ -250,7 +264,6 @@ public class WebServer {
           }
 
           // The URL was structured properly, so now we can validate the input
-
           String mailStatus;
           int sendDelay = 0;
 
@@ -281,6 +294,7 @@ public class WebServer {
             return;
           }
 
+          SMTPClient smtpClient = new SMTPClient(SMTP_TIMEOUT);
           // If the user requested a delay, we queue up the message to be sent later and redirect to the status page
           if(sendDelay > 0) {
             EmailMessage m = new EmailMessage(messageId, to, from, subject, smtpServer, "Pending", message);
@@ -309,9 +323,14 @@ public class WebServer {
             else {
               httpResponse.append("Location: /failure.html\r\n");
               File f = new File("../html/" + "failure.html");
-              FileWriter fwriter=new FileWriter(f);
-              fwriter.write("<html><head><title>Delivery Failure</title><body>Delivery Failure: " + mailStatus + "<br /><a href=\"form.html\">Back</a></body></html>");
-              fwriter.close();
+              FileWriter fwriter = null;
+              try {
+                fwriter = new FileWriter(f);
+                fwriter.write("<html><head><title>Delivery Failure</title><body>Delivery Failure: " + mailStatus + "<br /><a href=\"form.html\">Back</a></body></html>");
+              }
+              finally {
+                if (fwriter != null) fwriter.close();
+              }
             }
           }
         }

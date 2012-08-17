@@ -49,7 +49,6 @@ public class SMTPClient {
    * @param message The email contents
    * @return Status message detailing the success/failure of the delivery. 
    * This message is used to populate the email status page
-   * @throws IOException If there is an error releasing the socket/streams
    */
   public String sendMail(EmailMessage message) {
     String to = message.getTo();
