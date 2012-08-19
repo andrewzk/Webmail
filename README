@@ -27,7 +27,9 @@ sent, it is initially considered to be “Pending,” and once the email has bee
 sent, its status either changes to “Success” or an error message. When a user 
 sends a delayed email, he/she is automatically forwarded to a dynamically-
 generated status page, which displays the status of each email in a table. When 
-a delayed email is sent, the application informs the sender via email.
+a delayed email is sent, the application informs the sender via email. While 
+not the epitome of user experience design, these were strict requirements of 
+the university assignment.
 
 Technical details:
 

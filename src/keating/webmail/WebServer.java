@@ -302,7 +302,6 @@ public class WebServer {
             // Otherwise, we can send the message right away
             EmailMessage m = new EmailMessage(to, from, subject, smtpServer, message);
             mailStatus = smtpClient.sendMail(m, 0);
-            m.setStatus(mailStatus);
 
             httpResponse.append("HTTP/1.1 301 Moved Permanently\r\n");
             // Determine if the message succeeded or not and redirect accordingly

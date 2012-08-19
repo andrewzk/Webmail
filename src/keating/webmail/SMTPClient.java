@@ -255,7 +255,9 @@ public class SMTPClient {
     messages.add(message);
     
     if(delay < 1) {
-      return sendMail(message);
+      String status = sendMail(message);
+      message.setStatus(status);
+      return status;
     }
     
     int seconds = delay * 1000;
