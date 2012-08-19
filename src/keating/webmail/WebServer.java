@@ -28,10 +28,6 @@ import java.util.StringTokenizer;
 
 public class WebServer {
 
-  private static final int SMTP_TIMEOUT = 2000;
-
-  private int messageId; // Global message ID counter
-  private ArrayList<EmailMessage> messages; // Collection of email status messages
   private ServerSocket server;
   private Socket socket;
   private BufferedReader reader;
@@ -42,8 +38,6 @@ public class WebServer {
    * @param port Numerical port (<= 65535)
    */
   public WebServer(int port) {
-    messages = new ArrayList<EmailMessage>();
-
     try {
       server = new ServerSocket(port);
     }
@@ -54,7 +48,6 @@ public class WebServer {
 
   /**
    * Starts the web server, accepting requests on the socket
-   * @throws IOException If there is an error communicating with the client
    */
   public void start() {
     while(true) {
@@ -294,12 +287,10 @@ public class WebServer {
             return;
           }
 
-          SMTPClient smtpClient = new SMTPClient(SMTP_TIMEOUT);
+          SMTPClient smtpClient = SMTPClient.getInstance();
           // If the user requested a delay, we queue up the message to be sent later and redirect to the status page
           if(sendDelay > 0) {
-            EmailMessage m = new EmailMessage(messageId, to, from, subject, smtpServer, "Pending", message);
-            messages.add(m);
-            messageId++;
+            EmailMessage m = new EmailMessage(to, from, subject, smtpServer, message);
             smtpClient.sendMail(m, Integer.parseInt(delay));
             httpResponse.append("HTTP/1.1 301 Moved Permanently\r\n");
             httpResponse.append("Location: /status.html\r\n");
@@ -309,10 +300,8 @@ public class WebServer {
           }
           else {
             // Otherwise, we can send the message right away
-            EmailMessage m = new EmailMessage(messageId, to, from, subject, smtpServer, "Pending", message);
-            messages.add(m);
-            messageId++;
-            mailStatus = smtpClient.sendMail(m);
+            EmailMessage m = new EmailMessage(to, from, subject, smtpServer, message);
+            mailStatus = smtpClient.sendMail(m, 0);
             m.setStatus(mailStatus);
 
             httpResponse.append("HTTP/1.1 301 Moved Permanently\r\n");
@@ -371,7 +360,9 @@ public class WebServer {
     statusEntry.append("<html><head><meta http-equiv=\"Content-Type\" content=\"text/html;charset=iso-8859-15\" /><title>Status Page</title></head><body>");
     statusEntry.append("<a href=\"form.html\">Back</a> <a href=\"status.html\">Refresh</a><br />");
     statusEntry.append("<table border=\"1\" empty-cells=\"show\"><tr><td>To</td><td>From</td><td>Subject</td><td>Status</td><td>Submitted Time</td><td>Delivered Time</td></tr>");
-
+    
+    SMTPClient smtpClient = SMTPClient.getInstance();
+    ArrayList<EmailMessage> messages = smtpClient.getMessages();
     for(int i = 0; i < messages.size(); i++) {
       boolean pending = false;
 

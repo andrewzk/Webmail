@@ -14,6 +14,7 @@ import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.SocketTimeoutException;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 
 /**
@@ -29,28 +30,34 @@ import java.util.Date;
 
 public class SMTPClient {
 
-  private static final int SMTP_PORT = 25;
-
-  private int timeout;
+  private static final SMTPClient instance = new SMTPClient();
+  
+  private ArrayList<EmailMessage> messages; // Collection of email status messages
   private BufferedReader reader;
   private BufferedWriter writer;
   private Socket socket;
+  
+  private static final int SMTP_PORT = 25;
+  private static final int SMTP_TIMEOUT = 2000;
 
+  private SMTPClient() {
+    messages = new ArrayList<EmailMessage>();
+  }
+  
   /**
-   * Constructs a new SMTPClient
-   * @param timeout Timeout in milliseconds
+   * Get the active SMTPClient instance
+   * @return an instance of SMTPClient
    */
-  public SMTPClient(int timeout) {
-    this.timeout = timeout;
+  public static SMTPClient getInstance() {
+    return instance;
   }
 
   /**
-   * Sends an email and returns a status message
+   * Helper method which dispatches the email
    * @param message The email contents
    * @return Status message detailing the success/failure of the delivery. 
-   * This message is used to populate the email status page
    */
-  public String sendMail(EmailMessage message) {
+  private String sendMail(EmailMessage message) {
     String to = message.getTo();
     String from = message.getFrom();
     String subject = message.getSubject();
@@ -84,7 +91,7 @@ public class SMTPClient {
           SocketAddress address;
           address = new InetSocketAddress(server, SMTP_PORT);
 
-          socket.connect(address, timeout);
+          socket.connect(address, SMTP_TIMEOUT);
           reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
           writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
         }
@@ -228,13 +235,29 @@ public class SMTPClient {
     int atIndex = to.indexOf('@');
     return to.substring(atIndex + 1);
   }
+  
+  /**
+   * @return the list of sent email messages with their current statuses 
+   */
+  public ArrayList<EmailMessage> getMessages() {
+    return messages;
+  }
 
   /**
-   * Sends an email after a specified delay
+   * Sends an email after a specified delay. If a delay of 0 is specified, the email is 
+   * sent immediately.
+   * 
    * @param message Email message to be sent
    * @param delay Delay in milliseconds
+   * @return The email's delivery status, which is "Pending" if the email was delayed
    */
-  public void sendMail(final EmailMessage message, final int delay) {
+  public String sendMail(final EmailMessage message, final int delay) {
+    messages.add(message);
+    
+    if(delay < 1) {
+      return sendMail(message);
+    }
+    
     int seconds = delay * 1000;
     Timer t = new javax.swing.Timer(seconds, new ActionListener() {
       public void actionPerformed(ActionEvent e) {
@@ -242,7 +265,7 @@ public class SMTPClient {
           String status = sendMail(message);
           message.setStatus(status);
           String senderServer = DNSClient.mxLookup(getDomainFromAddress(message.getFrom()));
-          EmailMessage reply = new EmailMessage(-1, message.getFrom(), "noreply@ik2213.lab", "Your email: " + message.getSubject(), senderServer, "NotLogged", "The status of your email is: " + status);
+          EmailMessage reply = new EmailMessage(message.getFrom(), "noreply@ik2213.lab", "Your email: " + message.getSubject(), senderServer, "The status of your email is: " + status);
           sendMail(reply);
         }
         catch(Exception ex) {
@@ -252,6 +275,8 @@ public class SMTPClient {
     });
     t.setRepeats(false);
     t.start();
+    
+    return message.getStatus();
   }
 
   /**

@@ -13,7 +13,6 @@ import java.util.Date;
  */
 public class EmailMessage {
 
-  private int id;
   private String to;
   private String from;
   private String status;
@@ -25,28 +24,25 @@ public class EmailMessage {
   
   /**
    * Constructs a new EmailMessage
-   * @param id Unique identifier for the email message
    * @param to Intended recipient
    * @param from Sender of the message
    * @param subject Email subject
    * @param server SMTP server
-   * @param status Status of the message
    * @param data Message body
    */
-  public EmailMessage(int id, String to, String from, String subject, String server, String status, String data) {
+  public EmailMessage(String to, String from, String subject, String server, String data) {
     this.to = to;
     this.from = from;
     this.subject = subject;
-    this.status = status;
-    this.id = id;
     this.server = server;
     this.setData(data);
+    this.status = "Pending";
     
     SimpleDateFormat sdf = new SimpleDateFormat("EEE, d MMM yyyy HH:mm:ss Z");
     Date d = new Date();
     this.submitTime = sdf.format(d);
   }
-
+  
   public void setStatus(String status) {
     this.status = status;
   }
@@ -77,14 +73,6 @@ public class EmailMessage {
 
   public String getSubject() {
     return subject;
-  }
-
-  public void setId(int id) {
-    this.id = id;
-  }
-
-  public int getId() {
-    return id;
   }
 
   public void setServer(String server) {
